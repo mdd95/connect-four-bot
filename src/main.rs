@@ -1,4 +1,5 @@
-use std::cmp::{min, max};
+use rand::seq::IndexedRandom;
+use std::cmp::{max, min};
 use std::fmt;
 use std::io::stdin;
 
@@ -21,7 +22,9 @@ impl ConnectFour {
     }
 
     fn get_valid_moves(&self) -> Vec<usize> {
-        (0..COLS).filter(|&col| self.board[0][col] == EMPTY).collect()
+        (0..COLS)
+            .filter(|&col| self.board[0][col] == EMPTY)
+            .collect()
     }
 
     fn check_win(&self, player: i8) -> bool {
@@ -63,7 +66,9 @@ impl ConnectFour {
     }
 
     fn clone(&self) -> Self {
-        Self { board: self.board.clone() }
+        Self {
+            board: self.board.clone(),
+        }
     }
 }
 
@@ -98,11 +103,21 @@ impl BotPlayer {
         }
     }
 
-    fn minimax(&mut self, game: &mut ConnectFour, depth: i32, is_maximizing: bool) -> i32 {
+    fn minimax(
+        &mut self,
+        game: &mut ConnectFour,
+        depth: i32,
+        alpha: i32,
+        beta: i32,
+        is_maximizing: bool,
+    ) -> i32 {
         let valid_moves = game.get_valid_moves();
         if valid_moves.is_empty() || depth == 0 {
             return 0;
         }
+
+        let mut alpha = alpha;
+        let mut beta = beta;
 
         if is_maximizing {
             let mut max_score = i32::MIN;
@@ -114,10 +129,14 @@ impl BotPlayer {
                     let score = if game.check_win(BOT) {
                         self.reward
                     } else {
-                        self.minimax(game, depth - 1, false)
+                        self.minimax(game, depth - 1, alpha, beta, false)
                     };
                     game.board[row][col] = EMPTY;
                     max_score = max(max_score, score);
+                    alpha = max(alpha, score);
+                    if beta <= alpha {
+                        break;
+                    }
                 }
             }
             max_score
@@ -131,10 +150,14 @@ impl BotPlayer {
                     let score = if game.check_win(PLAYER) {
                         -self.reward
                     } else {
-                        self.minimax(game, depth - 1, true)
+                        self.minimax(game, depth - 1, alpha, beta, true)
                     };
                     game.board[row][col] = EMPTY;
                     min_score = min(min_score, score);
+                    beta = min(beta, score);
+                    if beta <= alpha {
+                        break;
+                    }
                 }
             }
             min_score
@@ -142,24 +165,31 @@ impl BotPlayer {
     }
 
     fn get_best_move(&mut self, game: &ConnectFour) -> Option<usize> {
-        let mut best_score = i32::MIN;
-        let mut best_move = None;
         let mut game_clone = game.clone();
+        let mut best_score = i32::MIN;
+        let mut best_moves: Vec<usize> = Vec::new();
 
         for col in game.get_valid_moves() {
-            if let Some(row) = (0..ROWS).rev().find(|&row| game_clone.board[row][col] == EMPTY) {
+            if let Some(row) = (0..ROWS)
+                .rev()
+                .find(|&row| game_clone.board[row][col] == EMPTY)
+            {
                 game_clone.board[row][col] = BOT;
 
-                let score = self.minimax(&mut game_clone, self.max_depth, false);
+                let score =
+                    self.minimax(&mut game_clone, self.max_depth, i32::MIN, i32::MAX, false);
                 game_clone.board[row][col] = EMPTY;
 
                 if score > best_score {
                     best_score = score;
-                    best_move = Some(col);
+                    best_moves.clear();
+                    best_moves.push(col);
+                } else if score == best_score {
+                    best_moves.push(col);
                 }
             }
         }
-        best_move
+        best_moves.choose(&mut rand::rng()).cloned()
     }
 }
 
@@ -192,7 +222,7 @@ fn main() {
             current_player = PLAYER;
             continue;
         }
-        
+
         println!("Enter column number (1-7):");
         let mut input = String::new();
         stdin().read_line(&mut input).unwrap();
